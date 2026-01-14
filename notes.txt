@@ -1,0 +1,123 @@
+in step 1 , accecpt user image and uplaod to s3 with
+ given bucket with public read always,and store those images to user
+
+in step 2 we will accept user uploaded images s3 url as input ,
+the task of this step is to generate the DNA description of this user/model
+
+what we are going to do is give prompt to gemini api to extract character DNA, the prompt will look something like this Prompt to Extract Character DNA from Image:
+
+"Analyze the provided reference image of the model and generate a detailed Character DNA summary. Focus on capturing her defining facial features, hair, and unique physical traits that make her identity recognizable. Describe her face shape, eye shape and color, eyebrows, nose, lips, hair style and color, and any other distinctive features. Output the description in clear, concise textual form that can be used as a seed to maintain identity consistency in future image generations. Include measurements or comparative descriptors where useful (e.g., “high cheekbones,” “slender nose,” “full lips with defined cupid’s bow”). Make sure the description is precise enough to allow faithful replication even if the visual reference is not available."
+
+which will give the character DNA, store this to DB as character DNA
+
+the schema of DNA would be like this 
+
+
+{
+  "id": "123e4567-e89b-12d3-a456-426614174000",
+  "name": "Alex",
+  
+  "face_features": {
+    "general": {
+      "face_shape": "oval",
+      "jawline_shape": "soft",
+      "chin_shape": "pointed"
+    },
+    "eyes": {
+      "shape": "almond",
+      "size": "medium",
+      "spacing": "normal",
+      "color": "#6B4423",
+      "eyelashes": "medium length, curled",
+      "eyelid_type": "double fold"
+    },
+    "eyebrows": {
+      "shape": "arched",
+      "thickness": "medium",
+      "color": "#321f1b"
+    },
+    "nose": {
+      "shape": "straight",
+      "width": "medium",
+      "nostril_shape": "oval",
+      "bridge_height": "medium"
+    },
+    "mouth": {
+      "shape": "bow",
+      "fullness": "medium",
+      "color": "#D67F6A",
+      "smile_type": "neutral"
+    },
+    "cheeks": {
+      "cheekbone_height": "high",
+      "cheek_fullness": "medium",
+      "dimples": false,
+      "freckles": ["light on nose and cheeks"],
+      "moles": []
+    },
+    "ears": {
+      "size": "medium",
+      "shape": "rounded",
+      "position": "medium"
+    },
+    "hair": {
+      "style": "short wavy",
+      "color": "#321f1b",
+      "texture": "medium",
+      "hairline_shape": "rounded",
+      "facial_hair": "none"
+    },
+    "skin": {
+      "tone": "#F3D2B2",
+      "undertone": "warm",
+      "texture": "smooth",
+      "blemishes": []
+    },
+    "default_expression": "neutral",
+    "expression_habits": ["slight eyebrow raise when thinking"]
+  },
+  
+  "body": {
+    "type": "athletic",
+    "height_cm": 175,
+    "weight_kg": 70,
+    "posture": "upright"
+  },
+  
+  "style": {
+    "clothing_preferences": ["streetwear", "casual"],
+    "accessories": ["watch", "earrings"],
+    "color_palette": ["#FF5733", "#33FF57", "#3357FF"]
+  },
+  
+  "personality": {
+    "temperament": "confident",
+    "gesture_habits": ["crosses arms when standing"],
+    "speech_style": "casual"
+  },
+  
+  "metadata": {
+    "created_at": "2026-01-13T14:00:00Z",
+    "updated_at": "2026-01-13T14:00:00Z",
+    "version": 1,
+    "source_model": "CustomAIv1"
+  }
+}
+
+
+in step 3 , we will get the user's moldel img that they uplaoded and which we have stored in S3, get all those from DB from user uploads all uploads fo rthe given user, take that and do a 
+nano banana request to generate a model portait in 2X2,use this exact prompt 
+
+A high-quality, photorealistic model composite of the subject in a 2x2 portrait grid, designed to capture a full view of the model’s facial structure and features for professional purposes. The composite includes:
+
+
+Top Left: Headshot – direct, eye-level view showing facial symmetry, eye color, and overall face shape.
+Top Right: Profile – perfect 90-degree side view highlighting the jawline, nose shape, and bone structure.
+Bottom Left: Three-quarter view from the left – 45-degree angle showing how light interacts with cheekbones and brow.
+Bottom Right: Three-quarter view from the right – 45-degree angle from the opposite side to provide balance and symmetry.
+
+The model is photographed with neutral expression, minimal styling, natural skin tones, and a plain, non-distracting background. Maintain consistency in lighting, focus, and sharpness across all four shots to allow accurate evaluation of facial features.
+
+
+and store that generated response by uploading it to s3 and storing the url in db in for this user, create a field in user called character_blank_portrait to store this url
+

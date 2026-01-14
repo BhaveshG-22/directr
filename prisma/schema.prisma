@@ -1,0 +1,689 @@
+// Virtual Photoshoot Generator - Database Schema
+// Prisma Schema File
+// Documentation: https://pris.ly/d/prisma-schema
+//
+// AUTHENTICATION: This app uses Clerk for authentication
+// - User management, sessions, and OAuth are handled by Clerk
+// - User.id is the Clerk user ID (e.g., user_2abc...)
+// - Clerk webhooks sync user data to our database
+// - No password storage needed - Clerk handles all auth
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// ============================================
+// USER MANAGEMENT (Clerk Integration)
+// ============================================
+// Clerk handles authentication, sessions, and accounts
+// This model syncs Clerk user data with our app data
+
+model User {
+  id            String    @id  // Clerk user ID (e.g., user_2abc...)
+  email         String    @unique
+  name          String?
+  imageUrl      String?   // Clerk profile image
+  username      String?   // Clerk username
+
+  // App-specific fields
+  role          UserRole  @default(USER)
+  creditBalance Int       @default(0)  // Current credit balance
+
+  // Metadata
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  lastLoginAt   DateTime?
+
+  // Relations
+  characters    CharacterDNA[]
+  photoshoots   Photoshoot[]
+  purchases     Purchase[]
+  credits       CreditTransaction[]
+  preferences   UserPreference?
+  favorites     Favorite[]
+  downloads     Download[]
+  uploads       UserUpload[]
+
+  @@index([email])
+  @@index([username])
+  @@map("users")
+}
+
+enum UserRole {
+  USER      // Free tier
+  PREMIUM   // Paid subscription
+  ADMIN     // Admin access
+}
+
+// ============================================
+// USER PREFERENCES
+// ============================================
+
+model UserPreference {
+  id                    String   @id @default(cuid())
+  userId                String   @unique
+  user                  User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  // Notification settings
+  emailNotifications    Boolean  @default(true)
+  marketingEmails       Boolean  @default(true)
+  photoshootComplete    Boolean  @default(true)
+  newStylesAvailable    Boolean  @default(true)
+  
+  // Display preferences
+  defaultQuality        ImageQuality @default(HIGH)
+  autoDownload          Boolean  @default(false)
+  
+  // Privacy settings
+  allowDataCollection   Boolean  @default(true)
+  publicProfile         Boolean  @default(false)
+  
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  @@map("user_preferences")
+}
+
+// ============================================
+// CHARACTER DNA SYSTEM
+// ============================================
+
+model CharacterDNA {
+  id              String   @id @default(uuid())
+  userId          String
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  name            String
+  description     String?  @db.Text
+  
+  // Detailed facial features stored as JSON
+  faceFeatures    Json     // Complete face_features object from DNA schema
+  body            Json     // Body characteristics
+  style           Json     // Style preferences
+  personality     Json     // Personality traits and habits
+  
+  // Quick access fields (denormalized for filtering)
+  faceShape       String?
+  eyeColor        String?
+  hairColor       String?
+  hairStyle       String?
+  skinTone        String?
+  bodyType        String?
+  heightCm        Int?
+  
+  // Usage tracking
+  isActive        Boolean  @default(true)
+  isPublic        Boolean  @default(false)  // Allow others to use this character
+  usageCount      Int      @default(0)      // Times used in photoshoots
+  
+  // Metadata
+  version         Int      @default(1)
+  sourceModel     String?  // AI model used to generate/validate
+  thumbnailUrl    String?  // Preview image of character
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  // Relations
+  photoshoots     Photoshoot[]
+  referenceImages CharacterReferenceImage[]
+
+  @@index([userId])
+  @@index([isActive])
+  @@index([isPublic])
+  @@index([name])
+  @@map("character_dna")
+}
+
+model CharacterReferenceImage {
+  id              String       @id @default(cuid())
+  characterId     String
+  character       CharacterDNA @relation(fields: [characterId], references: [id], onDelete: Cascade)
+  
+  url             String
+  thumbnailUrl    String?
+  type            ReferenceImageType
+  description     String?
+  
+  // Image metadata
+  width           Int?
+  height          Int?
+  fileSize        Int?
+  format          String?
+  
+  createdAt       DateTime     @default(now())
+
+  @@index([characterId])
+  @@map("character_reference_images")
+}
+
+enum ReferenceImageType {
+  FACE_FRONT
+  FACE_SIDE
+  FACE_THREEQUARTER
+  FULL_BODY
+  UPPER_BODY
+  STYLE_REFERENCE
+  OTHER
+}
+
+// ============================================
+// PHOTOSHOOT MANAGEMENT
+// ============================================
+
+model Photoshoot {
+  id              String           @id @default(cuid())
+  userId          String
+  user            User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  title           String
+  description     String?
+  styleId         String
+  style           PhotoshootStyle  @relation(fields: [styleId], references: [id])
+  
+  // Character DNA reference
+  characterId     String?
+  character       CharacterDNA?    @relation(fields: [characterId], references: [id], onDelete: SetNull)
+  
+  status          PhotoshootStatus @default(PENDING)
+  progress        Int              @default(0) // 0-100
+  
+  // Generation metadata
+  generationTime  Int?             // In seconds
+  estimatedTime   Int?             // Estimated completion in seconds
+  errorMessage    String?          @db.Text
+  retryCount      Int              @default(0)
+  
+  // Settings used for generation
+  settings        Json             // Stores user preferences for this shoot
+  
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  completedAt     DateTime?
+  
+  // Relations
+  images          Image[]
+  favorites       Favorite[]
+  downloads       Download[]
+
+  @@index([userId])
+  @@index([styleId])
+  @@index([characterId])
+  @@index([status])
+  @@index([createdAt])
+  @@map("photoshoots")
+}
+
+enum PhotoshootStatus {
+  PENDING       // Queued for processing
+  PROCESSING    // Currently generating
+  COMPLETED     // Successfully completed
+  FAILED        // Generation failed
+  CANCELLED     // User cancelled
+}
+
+model PhotoshootStyle {
+  id              String   @id @default(cuid())
+  name            String   @unique
+  displayName     String
+  description     String   @db.Text
+  category        StyleCategory
+  thumbnail       String
+  coverImage      String?
+  
+  // Style characteristics
+  environment     String
+  lighting        String
+  mood            String
+  tags            String[] // Array of searchable tags
+  
+  // Pricing and availability
+  isPremium       Boolean  @default(false)
+  isActive        Boolean  @default(true)
+  sortOrder       Int      @default(0)
+  popularityScore Int      @default(0)
+  
+  // Prompt configuration
+  basePrompt      String   @db.Text
+  negativePrompt  String?  @db.Text
+  promptSettings  Json     // Model-specific settings
+  
+  // Pose variations for this style
+  poseTemplates   Json     // Array of 5 pose descriptions
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  // Relations
+  photoshoots     Photoshoot[]
+  
+  @@index([category])
+  @@index([isPremium])
+  @@index([isActive])
+  @@index([sortOrder])
+  @@map("photoshoot_styles")
+}
+
+enum StyleCategory {
+  URBAN
+  NATURE
+  STUDIO
+  FASHION
+  LIFESTYLE
+  PROFESSIONAL
+  CREATIVE
+  SEASONAL
+  TRAVEL
+  FITNESS
+  PORTRAIT
+  EDITORIAL
+}
+
+// ============================================
+// IMAGE MANAGEMENT
+// ============================================
+
+model Image {
+  id              String         @id @default(cuid())
+  photoshootId    String
+  photoshoot      Photoshoot     @relation(fields: [photoshootId], references: [id], onDelete: Cascade)
+  
+  // Image ordering
+  position        Int            // 1-5 for each photoshoot
+  
+  // File information
+  url             String         // CDN/S3 URL
+  thumbnailUrl    String?        // Optimized thumbnail
+  filename        String
+  fileSize        Int            // In bytes
+  width           Int
+  height          Int
+  aspectRatio     String?        // e.g., "16:9", "4:3", "1:1"
+  format          String         // jpg, png, webp
+  quality         ImageQuality   @default(HIGH)
+  
+  // Generation metadata
+  prompt          String         @db.Text
+  negativePrompt  String?        @db.Text
+  seed            String?        // For reproducibility
+  steps           Int?           // Generation steps
+  cfgScale        Float?         // Guidance scale
+  sampler         String?        // Sampler used
+  modelVersion    String         // AI model version used
+  generationParams Json          // Full generation parameters
+  
+  // Character consistency
+  characterPrompt String?        @db.Text  // Extracted character description from DNA
+  poseDescription String?        @db.Text  // Specific pose for this image
+  
+  // Processing status
+  status          ImageStatus    @default(PROCESSING)
+  processingTime  Int?           // In milliseconds
+  
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+  
+  // Relations
+  downloads       Download[]
+
+  @@index([photoshootId])
+  @@index([status])
+  @@map("images")
+}
+
+enum ImageStatus {
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+enum ImageQuality {
+  STANDARD
+  HIGH
+  ULTRA
+}
+
+// ============================================
+// USER UPLOADS
+// ============================================
+
+model UserUpload {
+  id              String   @id @default(cuid())
+  userId          String
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // File information
+  url             String   // S3 URL
+  s3Key           String   // S3 object key
+  filename        String   // Original filename
+  fileSize        Int      // In bytes
+  contentType     String   // MIME type
+
+  // Upload metadata
+  uploadedAt      DateTime @default(now())
+
+  // Optional: Link to character if used
+  characterId     String?
+
+  // Soft delete for cleanup
+  isDeleted       Boolean  @default(false)
+  deletedAt       DateTime?
+
+  @@index([userId])
+  @@index([s3Key])
+  @@index([uploadedAt])
+  @@map("user_uploads")
+}
+
+// ============================================
+// PAYMENT & CREDITS
+// ============================================
+
+model Purchase {
+  id              String         @id @default(cuid())
+  userId          String
+  user            User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  // Purchase details
+  type            PurchaseType
+  quantity        Int            // Number of credits/photoshoots
+  amount          Int            // Amount in cents
+  currency        String         @default("usd")
+  
+  // Payment provider info
+  stripePaymentId String?        @unique
+  stripeStatus    String?
+  
+  status          PaymentStatus  @default(PENDING)
+  
+  // Metadata
+  metadata        Json?          // Additional purchase info
+  
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+  completedAt     DateTime?
+  
+  // Relations
+  creditTransaction CreditTransaction?
+
+  @@index([userId])
+  @@index([status])
+  @@index([createdAt])
+  @@map("purchases")
+}
+
+enum PurchaseType {
+  SINGLE_PHOTOSHOOT
+  CREDIT_PACK_5
+  CREDIT_PACK_10
+  CREDIT_PACK_25
+  MONTHLY_SUBSCRIPTION
+  ANNUAL_SUBSCRIPTION
+}
+
+enum PaymentStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+  REFUNDED
+  CANCELLED
+}
+
+model CreditTransaction {
+  id              String             @id @default(cuid())
+  userId          String
+  user            User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  type            CreditTransactionType
+  amount          Int                // Positive for credit, negative for debit
+  balance         Int                // Balance after this transaction
+  
+  // Reference to source
+  purchaseId      String?            @unique
+  purchase        Purchase?          @relation(fields: [purchaseId], references: [id])
+  
+  description     String?
+  metadata        Json?
+  
+  createdAt       DateTime           @default(now())
+
+  @@index([userId])
+  @@index([createdAt])
+  @@map("credit_transactions")
+}
+
+enum CreditTransactionType {
+  PURCHASE        // Bought credits
+  USAGE           // Used credits for photoshoot
+  REFUND          // Refunded credits
+  BONUS           // Promotional/bonus credits
+  EXPIRATION      // Credits expired
+}
+
+// ============================================
+// USER INTERACTIONS
+// ============================================
+
+model Favorite {
+  id            String      @id @default(cuid())
+  userId        String
+  user          User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  photoshootId  String
+  photoshoot    Photoshoot  @relation(fields: [photoshootId], references: [id], onDelete: Cascade)
+  
+  createdAt     DateTime    @default(now())
+
+  @@unique([userId, photoshootId])
+  @@index([userId])
+  @@index([photoshootId])
+  @@map("favorites")
+}
+
+model Download {
+  id            String      @id @default(cuid())
+  userId        String
+  user          User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  photoshootId  String
+  photoshoot    Photoshoot  @relation(fields: [photoshootId], references: [id], onDelete: Cascade)
+  imageId       String?     // Null if downloading entire photoshoot
+  image         Image?      @relation(fields: [imageId], references: [id], onDelete: Cascade)
+  
+  downloadType  DownloadType
+  fileFormat    String      // jpg, png, zip
+  
+  createdAt     DateTime    @default(now())
+
+  @@index([userId])
+  @@index([photoshootId])
+  @@index([createdAt])
+  @@map("downloads")
+}
+
+enum DownloadType {
+  SINGLE_IMAGE
+  ALL_IMAGES
+  SINGLE_IMAGE_HD
+  ALL_IMAGES_HD
+}
+
+// ============================================
+// ANALYTICS & TRACKING
+// ============================================
+
+model Analytics {
+  id            String       @id @default(cuid())
+  
+  // Event tracking
+  eventType     AnalyticsEvent
+  eventData     Json?
+  
+  // User context
+  userId        String?
+  sessionId     String?
+  
+  // Technical context
+  ipAddress     String?
+  userAgent     String?
+  referrer      String?
+  pathname      String?
+  
+  // Timestamps
+  createdAt     DateTime     @default(now())
+
+  @@index([eventType])
+  @@index([userId])
+  @@index([createdAt])
+  @@map("analytics")
+}
+
+enum AnalyticsEvent {
+  PAGE_VIEW
+  CHARACTER_CREATED
+  CHARACTER_UPDATED
+  PHOTOSHOOT_STARTED
+  PHOTOSHOOT_COMPLETED
+  PHOTOSHOOT_FAILED
+  PURCHASE_INITIATED
+  PURCHASE_COMPLETED
+  IMAGE_DOWNLOADED
+  STYLE_VIEWED
+  SIGNUP_COMPLETED
+  LOGIN_COMPLETED
+}
+
+// ============================================
+// CLERK WEBHOOK EVENTS
+// ============================================
+
+model WebhookEvent {
+  id            String   @id @default(cuid())
+
+  // Webhook details
+  eventType     String   // user.created, user.updated, etc.
+  clerkId       String?  // Clerk user/org ID from event
+
+  // Processing
+  status        WebhookStatus @default(PENDING)
+  attempts      Int      @default(0)
+  lastError     String?  @db.Text
+
+  // Raw data
+  payload       Json     // Full webhook payload
+
+  // Timestamps
+  receivedAt    DateTime @default(now())
+  processedAt   DateTime?
+
+  @@index([eventType])
+  @@index([status])
+  @@index([clerkId])
+  @@index([receivedAt])
+  @@map("webhook_events")
+}
+
+enum WebhookStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+// ============================================
+// SYSTEM & ADMIN
+// ============================================
+
+model SystemConfig {
+  id            String   @id @default(cuid())
+  key           String   @unique
+  value         String   @db.Text
+  description   String?
+  category      String?
+  
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@map("system_config")
+}
+
+model AuditLog {
+  id            String   @id @default(cuid())
+  
+  // Action details
+  action        String
+  entity        String   // User, CharacterDNA, Photoshoot, Purchase, etc.
+  entityId      String?
+  
+  // Actor
+  userId        String?
+  userEmail     String?
+  
+  // Changes
+  oldValue      Json?
+  newValue      Json?
+  
+  // Context
+  ipAddress     String?
+  userAgent     String?
+  
+  createdAt     DateTime @default(now())
+
+  @@index([entity, entityId])
+  @@index([userId])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
+
+// ============================================
+// WAITLIST & MARKETING
+// ============================================
+
+model Waitlist {
+  id            String        @id @default(cuid())
+  email         String        @unique
+  name          String?
+  
+  status        WaitlistStatus @default(PENDING)
+  source        String?       // Where they signed up from
+  referralCode  String?
+  
+  metadata      Json?         // Additional info collected
+  
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+  invitedAt     DateTime?
+  joinedAt      DateTime?
+
+  @@index([email])
+  @@index([status])
+  @@map("waitlist")
+}
+
+enum WaitlistStatus {
+  PENDING
+  INVITED
+  JOINED
+  DECLINED
+}
+
+model Newsletter {
+  id            String   @id @default(cuid())
+  email         String   @unique
+  name          String?
+  
+  isActive      Boolean  @default(true)
+  source        String?
+  
+  subscribedAt  DateTime @default(now())
+  unsubscribedAt DateTime?
+
+  @@index([email])
+  @@index([isActive])
+  @@map("newsletter")
+}
