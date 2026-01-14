@@ -82,9 +82,14 @@ export async function POST(request: NextRequest) {
       }))
     )
 
+    // Create a summary string of the character DNA for prompt generation
+    const dnaSummary = generateDNASummary(analyzedFeatures)
+
     return NextResponse.json({
       success: true,
       characterId,
+      characterDNA: analyzedFeatures,
+      characterDNASummary: dnaSummary,
       message: 'Character DNA generated successfully',
     })
   } catch (error) {
@@ -94,6 +99,47 @@ export async function POST(request: NextRequest) {
       { status: 500 }
     )
   }
+}
+
+/**
+ * Generate a human-readable summary of character DNA for use in prompts
+ */
+function generateDNASummary(dna: Partial<CharacterDNA>): string {
+  const parts: string[] = []
+
+  if (dna.face_features) {
+    const ff = dna.face_features
+    if (ff.general) {
+      parts.push(`${ff.general.face_shape} face shape with ${ff.general.jawline_shape} jawline`)
+    }
+    if (ff.eyes) {
+      parts.push(`${ff.eyes.shape} ${ff.eyes.size} eyes`)
+    }
+    if (ff.eyebrows) {
+      parts.push(`${ff.eyebrows.shape} ${ff.eyebrows.thickness} eyebrows`)
+    }
+    if (ff.nose) {
+      parts.push(`${ff.nose.shape} nose with ${ff.nose.width} width`)
+    }
+    if (ff.mouth) {
+      parts.push(`${ff.mouth.shape} ${ff.mouth.fullness} lips`)
+    }
+    if (ff.hair) {
+      parts.push(`${ff.hair.texture} ${ff.hair.style} hair`)
+    }
+    if (ff.skin) {
+      parts.push(`${ff.skin.texture} skin with ${ff.skin.undertone} undertone`)
+    }
+    if (ff.default_expression) {
+      parts.push(`default ${ff.default_expression} expression`)
+    }
+  }
+
+  if (dna.body) {
+    parts.push(`${dna.body.type} body type, approximately ${dna.body.height_cm}cm tall, ${dna.body.posture} posture`)
+  }
+
+  return parts.join(', ')
 }
 
 /**

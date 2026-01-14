@@ -1,20 +1,14 @@
 import { clerkMiddleware, createRouteMatcher } from '@clerk/nextjs/server'
-import { NextResponse } from 'next/server'
 
-const isProtectedRoute = createRouteMatcher([
-  '/dashboard(.*)',
-  '/photoshoot(.*)',
-  '/api/photoshoot(.*)',
+const isPublicRoute = createRouteMatcher([
+  '/',
+  '/sign-in(.*)',
+  '/sign-up(.*)',
+  '/api/webhooks(.*)',
 ])
 
-export default clerkMiddleware(async (auth, req) => {
-  // Skip middleware for upload route - handle auth in the route itself
-  if (req.nextUrl.pathname === '/api/upload') {
-    return NextResponse.next()
-  }
-
-  // For all other protected routes, ensure user is authenticated
-  if (isProtectedRoute(req)) {
+export default clerkMiddleware(async (auth, request) => {
+  if (!isPublicRoute(request)) {
     await auth.protect()
   }
 })

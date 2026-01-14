@@ -2,9 +2,13 @@
 
 import { useState } from "react";
 import { UserButton, SignInButton, useUser } from "@clerk/nextjs";
-import { Scene, PipelineState } from "../types";
+import { Scene, PipelineState, ScenePermutation, GeneratedScene } from "../types";
 import Step1SceneSelection from "./Step1SceneSelection";
 import Step2CharacterDNA from "./Step2CharacterDNA";
+import Step3PortraitGeneration from "./Step3PortraitGeneration";
+import Step4BestSelection from "./Step4BestSelection";
+import Step5ScenePermutation from "./Step5ScenePermutation";
+import Step6FinalGeneration from "./Step6FinalGeneration";
 
 interface PhotoshootPipelineProps {
   scenes: Scene[];
@@ -18,6 +22,12 @@ export default function PhotoshootPipeline({ scenes }: PhotoshootPipelineProps) 
     uploadedImages: [],
     characterId: null,
     characterName: null,
+    characterDNAString: null,
+    portraitUrl: null,
+    selectedImageIndex: null,
+    generatedPermutations: [],
+    selectedPermutationIds: [],
+    generatedScenes: [],
   });
 
   const updateState = (updates: Partial<PipelineState>) => {
@@ -41,11 +51,60 @@ export default function PhotoshootPipeline({ scenes }: PhotoshootPipelineProps) 
         return (
           <Step2CharacterDNA
             uploadedImages={state.uploadedImages}
-            onCharacterCreated={(characterId, characterName) =>
-              updateState({ characterId, characterName })
+            onCharacterCreated={(characterId, characterName, characterDNAString) =>
+              updateState({ characterId, characterName, characterDNAString })
             }
             onBack={() => updateState({ currentStep: 1 })}
             onNext={() => updateState({ currentStep: 3 })}
+          />
+        );
+      case 3:
+        return (
+          <Step3PortraitGeneration
+            characterId={state.characterId!}
+            characterName={state.characterName!}
+            onPortraitGenerated={(url) => updateState({ portraitUrl: url })}
+            onBack={() => updateState({ currentStep: 2 })}
+            onNext={() => updateState({ currentStep: 4 })}
+          />
+        );
+      case 4:
+        return (
+          <Step4BestSelection
+            uploadedImages={state.uploadedImages}
+            onBestImageSelected={(index) => updateState({ selectedImageIndex: index })}
+            onBack={() => updateState({ currentStep: 3 })}
+            onNext={() => updateState({ currentStep: 5 })}
+          />
+        );
+      case 5:
+        return (
+          <Step5ScenePermutation
+            selectedScene={state.selectedScene!}
+            characterDNA={state.characterDNAString || ""}
+            onPermutationsGenerated={(permutations) =>
+              updateState({ generatedPermutations: permutations })
+            }
+            onSelectedPermutationsChange={(ids) =>
+              updateState({ selectedPermutationIds: ids })
+            }
+            onBack={() => updateState({ currentStep: 4 })}
+            onNext={() => updateState({ currentStep: 6 })}
+          />
+        );
+      case 6:
+        return (
+          <Step6FinalGeneration
+            permutations={state.generatedPermutations}
+            selectedPermutationIds={state.selectedPermutationIds}
+            characterPortraitUrl={state.portraitUrl || ""}
+            characterDNA={state.characterDNAString || ""}
+            uploadedImages={state.uploadedImages}
+            selectedImageIndex={state.selectedImageIndex || 0}
+            onScenesGenerated={(scenes) =>
+              updateState({ generatedScenes: scenes })
+            }
+            onBack={() => updateState({ currentStep: 5 })}
           />
         );
       default:

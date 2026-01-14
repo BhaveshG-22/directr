@@ -12,12 +12,34 @@ export interface UploadedImage {
   type: string;
 }
 
+export interface ScenePermutation {
+  id: number;
+  variables: Record<string, string>;
+  prompt: string;
+  originalPrompt?: string;
+}
+
+export interface GeneratedScene {
+  index: number;
+  permutationId: number;
+  url: string;
+  prompt: string;
+  status: "pending" | "generating" | "completed" | "failed";
+  error?: string;
+}
+
 export interface PipelineState {
   currentStep: number;
   selectedScene: Scene | null;
   uploadedImages: UploadedImage[];
   characterId: string | null;
   characterName: string | null;
+  characterDNAString: string | null;
+  portraitUrl: string | null;
+  selectedImageIndex: number | null;
+  generatedPermutations: ScenePermutation[];
+  selectedPermutationIds: number[];
+  generatedScenes: GeneratedScene[];
 }
 
 // Re-export character DNA types for convenience

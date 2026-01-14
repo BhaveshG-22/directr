@@ -5,7 +5,7 @@ import { UploadedImage } from "../types";
 
 interface Step2CharacterDNAProps {
   uploadedImages: UploadedImage[];
-  onCharacterCreated: (characterId: string, characterName: string) => void;
+  onCharacterCreated: (characterId: string, characterName: string, characterDNAString: string) => void;
   onBack: () => void;
   onNext: () => void;
 }
@@ -70,7 +70,7 @@ export default function Step2CharacterDNA({
 
       const data = await response.json();
       setCharacterId(data.characterId);
-      onCharacterCreated(data.characterId, characterName);
+      onCharacterCreated(data.characterId, characterName, data.characterDNASummary || "");
     } catch (err) {
       console.error("DNA generation error:", err);
       setError(err instanceof Error ? err.message : "Failed to generate Character DNA");

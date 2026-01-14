@@ -34,6 +34,8 @@ model User {
   // App-specific fields
   role          UserRole  @default(USER)
   creditBalance Int       @default(0)  // Current credit balance
+  character_blank_portrait String? // Generated 2x2 portrait composite
+  best_selected_image_url String? // URL of the best image selected by AI in Step 4
 
   // Metadata
   createdAt     DateTime  @default(now())

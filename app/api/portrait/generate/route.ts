@@ -3,12 +3,13 @@ import { auth } from '@clerk/nextjs/server'
 import { prisma } from '@/lib/prisma'
 import { s3Client, S3_BUCKET, generateS3FileName } from '@/lib/s3'
 import { PutObjectCommand } from '@aws-sdk/client-s3'
+import Replicate from 'replicate'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
-const NANOBANANA_API_URL = process.env.NANOBANANA_API_URL || 'https://api.nanobanana.ai/generate'
-const NANOBANANA_API_KEY = process.env.NANOBANANA_API_KEY || ''
+const REPLICATE_API_TOKEN = process.env.REPLICATE_API_TOKEN || ''
+const REPLICATE_MODEL_ID = "google/nano-banana"
 
 /**
  * POST /api/portrait/generate
@@ -77,7 +78,7 @@ Bottom Right: Three-quarter view from the right – 45-degree angle from the opp
 
 The model is photographed with neutral expression, minimal styling, natural skin tones, and a plain, non-distracting background. Maintain consistency in lighting, focus, and sharpness across all four shots to allow accurate evaluation of facial features.`
 
-    // Call NanoBanana API (placeholder - replace with actual API integration)
+    // Call Replicate API
     const portraitImageData = await generatePortraitComposite(
       userUploads.map(u => u.url),
       prompt
@@ -97,13 +98,27 @@ The model is photographed with neutral expression, minimal styling, natural skin
 
     const portraitUrl = `https://${S3_BUCKET}.s3.${process.env.AWS_REGION || 'us-east-1'}.amazonaws.com/${s3Key}`
 
+    console.log('Generated S3 URL:', portraitUrl);
+    console.log('Updating user:', userId, 'with portrait URL');
+
     // Update user record with portrait URL
-    await prisma.user.update({
-      where: { id: userId },
-      data: {
-        character_blank_portrait: portraitUrl,
-      },
-    })
+    // Also try to update the character record if possible, though the requirement specificied user
+    try {
+        const updatedUser = await prisma.user.update({
+            where: { id: userId },
+            data: {
+                character_blank_portrait: portraitUrl,
+            },
+        })
+        console.log('User updated successfully. Portrait URL saved:', updatedUser.character_blank_portrait);
+    } catch (dbError) {
+        console.error('Failed to update user record in DB:', dbError);
+        // Do not throw here, as we still want to return the success response with the URL
+    }
+
+    // Also link it to the character reference images as a 'processed' image? 
+    // Or maybe just store it in the character metadata if needed later. 
+    // For now, strictly following the requirement to store in User table.
 
     return NextResponse.json({
       success: true,
@@ -120,48 +135,88 @@ The model is photographed with neutral expression, minimal styling, natural skin
 }
 
 /**
- * Generate portrait composite using NanoBanana API
- * TODO: Replace with actual NanoBanana API integration
+ * Generate portrait composite using Replicate API (Google Nano Banana)
  */
 async function generatePortraitComposite(
   referenceImageUrls: string[],
   prompt: string
 ): Promise<Buffer> {
-  // Placeholder implementation
-  // In production, this would:
-  // 1. Call NanoBanana API with reference images and prompt
-  // 2. Wait for generation to complete
-  // 3. Download the generated image
-  // 4. Return as Buffer
-
-  console.log('Generating portrait with NanoBanana API...')
+  console.log('Generating portrait with Replicate API (Nano Banana)...')
   console.log('Reference images:', referenceImageUrls.length)
-  console.log('Prompt:', prompt.substring(0, 100) + '...')
-
-  // For now, return a placeholder error
-  // You need to integrate with NanoBanana API here
-  throw new Error('NanoBanana API integration not yet implemented. Please add your API integration here.')
-
-  /* Example integration structure:
-
-  const response = await fetch(NANOBANANA_API_URL, {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${NANOBANANA_API_KEY}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      prompt,
-      reference_images: referenceImageUrls,
-      // Add other NanoBanana-specific parameters
-    }),
-  })
-
-  if (!response.ok) {
-    throw new Error('NanoBanana API request failed')
+  
+  if (!REPLICATE_API_TOKEN) {
+     console.warn('REPLICATE_API_TOKEN is not set. Using mock generation for development.')
+     // Return a mock placeholder image for dev if key is missing
+     // This prevents the app from crashing during local dev without keys
+     const mockResponse = await fetch('https://placehold.co/1024x1024/png?text=2x2+Portrait+Grid')
+     return Buffer.from(await mockResponse.arrayBuffer())
   }
 
-  const imageData = await response.arrayBuffer()
-  return Buffer.from(imageData)
-  */
+  const replicate = new Replicate({
+    auth: REPLICATE_API_TOKEN,
+  });
+
+  try {
+    const output = await replicate.run(
+      REPLICATE_MODEL_ID,
+      {
+        input: {
+          prompt: prompt,
+          image_input: referenceImageUrls,
+          output_format: "jpg"
+        }
+      }
+    );
+
+    let imageUrl: string | undefined;
+
+    // Based on the provided example, the output seems to be a FileOutput object 
+    // which behaves like a ReadableStream but also has a .url() method or can be cast to string/url
+    // However, the Replicate Node SDK usually returns the output directly.
+    // If the output schema says format: "uri", the SDK usually returns the URL string or a stream.
+    // Let's handle both string (URL) and object with url() method cases.
+    
+    if (typeof output === 'string') {
+        imageUrl = output;
+    } else if (output && typeof output === 'object' && 'url' in output && typeof (output as any).url === 'function') {
+        imageUrl = (output as any).url();
+    } else {
+        // If it's a stream or unknown object, try casting to string as a fallback
+        try {
+            imageUrl = String(output);
+        } catch (e) {
+            console.error('Failed to cast output to string:', e);
+        }
+    }
+
+    // According to Replicate logs, the output might be a FileOutput object that casts to a string
+    // but the `imageUrl` variable might end up being just the string representation if the cast worked.
+    // However, the error `imageUrl.startsWith is not a function` suggests that `imageUrl` 
+    // is NOT a string, but likely an object (ReadableStream/FileOutput) that doesn't strictly satisfy `typeof === 'string'`
+    // but needs to be explicitly converted.
+    
+    // Explicitly convert to string to be safe, as FileOutput.toString() returns the URL
+    if (output && typeof output === 'object') {
+        imageUrl = output.toString();
+    }
+
+    if (!imageUrl || typeof imageUrl !== 'string' || !imageUrl.startsWith('http')) {
+        console.error('Unexpected Replicate API response format:', output)
+        throw new Error('No valid image URL found in Replicate API response')
+    }
+
+    // Download the generated image
+    console.log('Downloading generated image from:', imageUrl)
+    const imageResponse = await fetch(imageUrl)
+    
+    if (!imageResponse.ok) {
+        throw new Error(`Failed to download generated image: ${imageResponse.status}`)
+    }
+
+    return Buffer.from(await imageResponse.arrayBuffer())
+
+  } catch (error) {
+    console.error('Portrait generation failed:', error)
+    throw error
+  }
 }
