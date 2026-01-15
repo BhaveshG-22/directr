@@ -63,6 +63,7 @@ export default function PhotoshootPipeline({ scenes }: PhotoshootPipelineProps) 
           <Step3PortraitGeneration
             characterId={state.characterId!}
             characterName={state.characterName!}
+            uploadedImages={state.uploadedImages}
             onPortraitGenerated={(url) => updateState({ portraitUrl: url })}
             onBack={() => updateState({ currentStep: 2 })}
             onNext={() => updateState({ currentStep: 4 })}

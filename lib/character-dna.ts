@@ -3,7 +3,6 @@
 
 import { CharacterDNA, CreateCharacterDNAInput, extractQuickAccessFields, DEFAULT_CHARACTER_DNA } from '@/app/types/character-dna'
 import { prisma } from '@/lib/prisma'
-import { Prisma } from '@prisma/client' // Import the Prisma namespace
 /**
  * Create a new character DNA record in the database
  */
@@ -32,10 +31,10 @@ export async function createCharacterDNA(
       userId,
       name,
       description,
-      faceFeatures: face_features as unknown as Prisma.InputJsonValue,
-      body: body as unknown as Prisma.InputJsonValue,
-      style: style as unknown as Prisma.InputJsonValue,
-      personality: personality as unknown as Prisma.InputJsonValue,
+      faceFeatures: face_features as object,
+      body: body as object,
+      style: style as object,
+      personality: personality as object,
       thumbnailUrl,
       isPublic: isPublic || false,
       // Denormalized fields for quick filtering
@@ -92,7 +91,7 @@ export async function getUserCharacterDNAs(userId: string): Promise<CharacterDNA
     },
   })
 
-  return characters.map((character) => ({
+  return characters.map((character: typeof characters[number]) => ({
     id: character.id,
     name: character.name,
     face_features: character.faceFeatures as any,

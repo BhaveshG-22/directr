@@ -27,7 +27,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json()
-    const { characterId } = body
+    const { characterId, improvementFeedback, selectedImageUrls } = body
 
     if (!characterId) {
       return NextResponse.json(
@@ -49,27 +49,39 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Get user's uploaded images
-    const userUploads = await prisma.userUpload.findMany({
-      where: {
-        userId,
-        isDeleted: false,
-      },
-      orderBy: {
-        uploadedAt: 'desc',
-      },
-      take: 10, // Use up to 10 reference images
-    })
+    // Determine which images to use
+    let imageUrls: string[] = []
 
-    if (userUploads.length === 0) {
-      return NextResponse.json(
-        { error: 'No uploaded images found for user' },
-        { status: 400 }
-      )
+    if (selectedImageUrls && Array.isArray(selectedImageUrls) && selectedImageUrls.length > 0) {
+      // Use the pre-selected top images (e.g., top 4)
+      imageUrls = selectedImageUrls
+      console.log(`Using ${imageUrls.length} pre-selected images for portrait generation`)
+    } else {
+      // Get user's uploaded images from database (default: all images)
+      const userUploads = await prisma.userUpload.findMany({
+        where: {
+          userId,
+          isDeleted: false,
+        },
+        orderBy: {
+          uploadedAt: 'desc',
+        },
+        take: 10, // Use up to 10 reference images
+      })
+
+      if (userUploads.length === 0) {
+        return NextResponse.json(
+          { error: 'No uploaded images found for user' },
+          { status: 400 }
+        )
+      }
+
+      imageUrls = userUploads.map((u: { url: string }) => u.url)
+      console.log(`Using all ${imageUrls.length} uploaded images for portrait generation`)
     }
 
     // Prepare prompt for 2x2 portrait composite
-    const prompt = `A high-quality, photorealistic model composite of the subject in a 2x2 portrait grid, designed to capture a full view of the model's facial structure and features for professional purposes. The composite includes:
+    let prompt = `A high-quality, photorealistic model composite of the subject in a 2x2 portrait grid, designed to capture a full view of the model's facial structure and features for professional purposes. The composite includes:
 
 Top Left: Headshot – direct, eye-level view showing facial symmetry, eye color, and overall face shape.
 Top Right: Profile – perfect 90-degree side view highlighting the jawline, nose shape, and bone structure.
@@ -78,9 +90,21 @@ Bottom Right: Three-quarter view from the right – 45-degree angle from the opp
 
 The model is photographed with neutral expression, minimal styling, natural skin tones, and a plain, non-distracting background. Maintain consistency in lighting, focus, and sharpness across all four shots to allow accurate evaluation of facial features.`
 
+    // Add improvement feedback to prompt if this is a regeneration
+    if (improvementFeedback && Array.isArray(improvementFeedback) && improvementFeedback.length > 0) {
+      const improvementsList = improvementFeedback.join(', ')
+      prompt += `
+
+IMPORTANT: This is a regeneration attempt. Pay special attention to accurately capturing the following aspects that need improvement from the previous generation:
+- ${improvementFeedback.join('\n- ')}
+
+Ensure these specific features (${improvementsList}) closely match the reference images provided.`
+      console.log('Regenerating with improvement feedback:', improvementFeedback)
+    }
+
     // Call Replicate API
     const portraitImageData = await generatePortraitComposite(
-      userUploads.map(u => u.url),
+      imageUrls,
       prompt
     )
 

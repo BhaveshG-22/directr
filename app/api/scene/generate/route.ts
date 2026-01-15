@@ -8,7 +8,14 @@ export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
 const REPLICATE_API_TOKEN = process.env.REPLICATE_API_TOKEN || ''
-const REPLICATE_MODEL_ID = "google/nano-banana"
+
+// Available models for scene generation
+const MODELS = {
+  "nano-banana": "google/nano-banana",
+  "ideogram-character": "ideogram-ai/ideogram-character",
+} as const
+
+type ModelKey = keyof typeof MODELS
 
 /**
  * POST /api/scene/generate
@@ -16,9 +23,11 @@ const REPLICATE_MODEL_ID = "google/nano-banana"
  *
  * Body: {
  *   prompt: string - The baked scene prompt with all variations
- *   characterPortraitUrl: string - The 2x2 portrait grid URL
- *   userBestPortraitUrl: string - The best user upload URL
+ *   characterPortraitUrl: string | null - The 2x2 portrait grid URL (Mode 1)
+ *   userBestPortraitUrl: string | null - The best user upload URL (Mode 1)
+ *   referenceImageUrls: string[] | null - Array of top 3 user portrait URLs (Mode 2)
  *   sceneIndex: number - Index of this scene in the batch (for naming)
+ *   model: "nano-banana" | "ideogram-character" - Which model to use
  * }
  */
 export async function POST(request: NextRequest) {
@@ -32,7 +41,10 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json()
-    const { prompt, characterPortraitUrl, userBestPortraitUrl, characterDNA, sceneIndex = 0 } = body
+    const { prompt, characterPortraitUrl, userBestPortraitUrl, referenceImageUrls, characterDNA, sceneIndex = 0, model = "nano-banana" } = body
+
+    // Validate model selection
+    const selectedModel: ModelKey = (model in MODELS) ? model : "nano-banana"
 
     if (!prompt) {
       return NextResponse.json(
@@ -41,9 +53,13 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    if (!characterPortraitUrl && !userBestPortraitUrl) {
+    // Validate that at least one reference source is provided
+    const hasGridAndBest = characterPortraitUrl || userBestPortraitUrl
+    const hasTopPortraits = referenceImageUrls && Array.isArray(referenceImageUrls) && referenceImageUrls.length > 0
+
+    if (!hasGridAndBest && !hasTopPortraits) {
       return NextResponse.json(
-        { error: 'At least one reference image is required' },
+        { error: 'At least one reference image source is required' },
         { status: 400 }
       )
     }
@@ -51,19 +67,36 @@ export async function POST(request: NextRequest) {
     // Collect reference images for the model
     const referenceImages: string[] = []
 
-    if (characterPortraitUrl) {
-      referenceImages.push(characterPortraitUrl)
+    // Mode 3: All Combined - both grid+best AND top portraits
+    if (hasGridAndBest && hasTopPortraits) {
+      if (characterPortraitUrl) {
+        referenceImages.push(characterPortraitUrl)
+      }
+      if (userBestPortraitUrl) {
+        referenceImages.push(userBestPortraitUrl)
+      }
+      referenceImages.push(...referenceImageUrls)
+      console.log(`Using All Combined mode with ${referenceImages.length} images (grid+best+top3)`)
+    } else if (hasTopPortraits) {
+      // Mode 2: Use top 3 user portraits directly
+      referenceImages.push(...referenceImageUrls)
+      console.log(`Using Top 3 Portraits mode with ${referenceImageUrls.length} images`)
+    } else {
+      // Mode 1: Use character portrait grid + best photo
+      if (characterPortraitUrl) {
+        referenceImages.push(characterPortraitUrl)
+      }
+      if (userBestPortraitUrl) {
+        referenceImages.push(userBestPortraitUrl)
+      }
+      console.log(`Using Grid + Best Photo mode with ${referenceImages.length} images`)
     }
 
-    if (userBestPortraitUrl) {
-      referenceImages.push(userBestPortraitUrl)
-    }
-
-    console.log(`Generating scene ${sceneIndex + 1} with ${referenceImages.length} reference images`)
+    console.log(`Generating scene ${sceneIndex + 1} with ${referenceImages.length} reference images using ${selectedModel}`)
     console.log(`Character DNA: ${characterDNA ? characterDNA.substring(0, 100) + '...' : 'Not provided'}`)
 
     // Generate the scene image
-    const sceneImageData = await generateSceneImage(referenceImages, prompt)
+    const sceneImageData = await generateSceneImage(referenceImages, prompt, selectedModel)
 
     // Upload to S3
     const s3Key = generateS3FileName(userId, `scene-${sceneIndex + 1}-${Date.now()}.jpg`)
@@ -98,13 +131,14 @@ export async function POST(request: NextRequest) {
 }
 
 /**
- * Generate scene image using Replicate API (Google Nano Banana)
+ * Generate scene image using Replicate API
  */
 async function generateSceneImage(
   referenceImageUrls: string[],
-  prompt: string
+  prompt: string,
+  model: ModelKey
 ): Promise<Buffer> {
-  console.log('Generating scene with Replicate API (Nano Banana)...')
+  console.log(`Generating scene with Replicate API (${model})...`)
   console.log('Reference images:', referenceImageUrls.length)
   console.log('Prompt length:', prompt.length)
 
@@ -119,16 +153,39 @@ async function generateSceneImage(
   })
 
   try {
-    const output = await replicate.run(
-      REPLICATE_MODEL_ID,
-      {
-        input: {
-          prompt: prompt,
-          image_input: referenceImageUrls,
-          output_format: "jpg"
+    let output: unknown
+
+    if (model === "ideogram-character") {
+      // Ideogram Character model - uses single reference image
+      const characterReferenceImage = referenceImageUrls[0] // Use first image as reference
+      console.log('Using Ideogram Character with reference:', characterReferenceImage)
+
+      output = await replicate.run(
+        MODELS["ideogram-character"],
+        {
+          input: {
+            prompt: prompt,
+            character_reference_image: characterReferenceImage,
+            style_type: "Realistic",
+            aspect_ratio: "1:1",
+            rendering_speed: "Default",
+            magic_prompt_option: "Auto",
+          }
         }
-      }
-    )
+      )
+    } else {
+      // Nano Banana model - supports multiple reference images
+      output = await replicate.run(
+        MODELS["nano-banana"],
+        {
+          input: {
+            prompt: prompt,
+            image_input: referenceImageUrls,
+            output_format: "jpg"
+          }
+        }
+      )
+    }
 
     let imageUrl: string | undefined
 
