@@ -248,6 +248,7 @@ model PhotoshootStyle {
   // Pricing and availability
   isPremium       Boolean  @default(false)
   isActive        Boolean  @default(true)
+  isExperimental  Boolean  @default(false)  // Track new/experimental prompts
   sortOrder       Int      @default(0)
   popularityScore Int      @default(0)
   
