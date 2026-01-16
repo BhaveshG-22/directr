@@ -1,10 +1,11 @@
 "use client";
 
-import { useState, ChangeEvent } from "react";
+import { useState } from "react";
 import { UploadedImage } from "../types";
 
 interface Step2CharacterDNAProps {
   uploadedImages: UploadedImage[];
+  userName: string; // Name from Clerk
   onCharacterCreated: (characterId: string, characterName: string, characterDNAString: string) => void;
   onBack: () => void;
   onNext: () => void;
@@ -12,23 +13,20 @@ interface Step2CharacterDNAProps {
 
 export default function Step2CharacterDNA({
   uploadedImages,
+  userName,
   onCharacterCreated,
   onBack,
   onNext,
 }: Step2CharacterDNAProps) {
-  const [characterName, setCharacterName] = useState("");
-  const [description, setDescription] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
   const [generationProgress, setGenerationProgress] = useState(0);
   const [characterId, setCharacterId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const handleGenerateDNA = async () => {
-    if (!characterName.trim()) {
-      setError("Please enter a character name");
-      return;
-    }
+  // Use Clerk user name as character name
+  const characterName = userName || "User";
 
+  const handleGenerateDNA = async () => {
     if (uploadedImages.length === 0) {
       setError("No images uploaded. Please go back and upload images.");
       return;
@@ -56,7 +54,6 @@ export default function Step2CharacterDNA({
         body: JSON.stringify({
           name: characterName,
           imageUrls,
-          description: description || undefined,
         }),
       });
 
@@ -134,7 +131,7 @@ export default function Step2CharacterDNA({
         </div>
       </div>
 
-      {/* Character Details Form */}
+      {/* Character Info & Generate */}
       <div className="bg-white rounded-[12px] p-4 sm:p-6 border-2 border-grey-light">
         <div className="flex items-start gap-3 mb-4">
           <div className="w-8 h-8 rounded-full bg-charcoal flex items-center justify-center flex-shrink-0 mt-1">
@@ -143,38 +140,17 @@ export default function Step2CharacterDNA({
             </svg>
           </div>
           <div className="flex-1">
-            <label htmlFor="character-name" className="block text-base font-semibold text-charcoal mb-2">
-              Character Name
-            </label>
-            <input
-              id="character-name"
-              type="text"
-              value={characterName}
-              onChange={(e: ChangeEvent<HTMLInputElement>) => setCharacterName(e.target.value)}
-              placeholder="e.g., Alex, Sarah, John..."
-              disabled={isGenerating || characterId !== null}
-              className="w-full px-4 py-3 border-2 border-grey-light rounded-[8px] focus:ring-2 focus:ring-gold focus:border-gold transition-all text-charcoal bg-white text-base disabled:bg-grey-light disabled:cursor-not-allowed"
-            />
-
-            <label htmlFor="character-description" className="block text-base font-semibold text-charcoal mb-2 mt-4">
-              Description (Optional)
-            </label>
-            <textarea
-              id="character-description"
-              value={description}
-              onChange={(e: ChangeEvent<HTMLTextAreaElement>) => setDescription(e.target.value)}
-              placeholder="Brief description of the character..."
-              disabled={isGenerating || characterId !== null}
-              rows={3}
-              className="w-full px-4 py-3 border-2 border-grey-light rounded-[8px] focus:ring-2 focus:ring-gold focus:border-gold transition-all text-charcoal bg-white text-base disabled:bg-grey-light disabled:cursor-not-allowed"
-            />
+            <div className="mb-4">
+              <p className="text-sm text-grey mb-1">Character Name</p>
+              <p className="text-lg font-semibold text-charcoal">{characterName}</p>
+            </div>
 
             {!characterId && (
               <button
                 onClick={handleGenerateDNA}
-                disabled={isGenerating || !characterName.trim()}
-                className={`mt-4 w-full px-6 py-4 rounded-[8px] font-semibold text-base transition-all flex items-center justify-center gap-2 ${
-                  isGenerating || !characterName.trim()
+                disabled={isGenerating}
+                className={`w-full px-6 py-4 rounded-[8px] font-semibold text-base transition-all flex items-center justify-center gap-2 ${
+                  isGenerating
                     ? "bg-grey-light text-grey cursor-not-allowed"
                     : "bg-blue text-white hover:opacity-90 hover:scale-105 shadow-lg"
                 }`}
