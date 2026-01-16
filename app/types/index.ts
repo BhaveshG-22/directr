@@ -3,6 +3,12 @@ export interface Scene {
   title: string;
   slug: string;
   detailedPrompt: string;
+  // Additional PhotoshootStyle fields for enhanced prompt generation
+  environment?: string;
+  lighting?: string;
+  mood?: string;
+  negativePrompt?: string | null;
+  poseTemplates?: string[]; // Array of style-specific pose descriptions
 }
 
 export interface UploadedImage {
@@ -17,6 +23,7 @@ export interface ScenePermutation {
   variables: Record<string, string>;
   prompt: string;
   originalPrompt?: string;
+  negativePrompt?: string | null;
 }
 
 export interface GeneratedScene {
