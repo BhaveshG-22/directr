@@ -45,6 +45,12 @@ export default function Step4ScenePermutation({
           scenePrompt: selectedScene.detailedPrompt,
           characterDNA: characterDNA,
           count: 5,
+          // Pass additional style fields for enhanced prompt generation
+          environment: selectedScene.environment,
+          lighting: selectedScene.lighting,
+          mood: selectedScene.mood,
+          negativePrompt: selectedScene.negativePrompt,
+          poseTemplates: selectedScene.poseTemplates,
         }),
       });
 
