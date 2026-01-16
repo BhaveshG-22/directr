@@ -156,9 +156,11 @@ async function generateSceneImage(
     let output: unknown
 
     if (model === "ideogram-character") {
-      // Ideogram Character model - uses single reference image
-      const characterReferenceImage = referenceImageUrls[0] // Use first image as reference
-      console.log('Using Ideogram Character with reference:', characterReferenceImage)
+      // Ideogram Character model - only supports a single reference image
+      // Use the first (best) image from the provided references
+      const characterReferenceImage = referenceImageUrls[0]
+      console.log(`Using Ideogram Character with reference image: ${characterReferenceImage}`)
+      console.log(`(${referenceImageUrls.length} images provided, using first/best one - Ideogram only supports 1 reference)`)
 
       output = await replicate.run(
         MODELS["ideogram-character"],
