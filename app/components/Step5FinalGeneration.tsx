@@ -34,10 +34,9 @@ interface ValidationResult {
   overall_assessment: string;
 }
 
-interface Step6FinalGenerationProps {
+interface Step5FinalGenerationProps {
   permutations: ScenePermutation[];
   selectedPermutationIds: number[];
-  characterPortraitUrl: string;
   characterDNA: string;
   uploadedImages: UploadedImage[];
   selectedImageIndex: number;
@@ -45,16 +44,15 @@ interface Step6FinalGenerationProps {
   onBack: () => void;
 }
 
-export default function Step6FinalGeneration({
+export default function Step5FinalGeneration({
   permutations,
   selectedPermutationIds,
-  characterPortraitUrl,
   characterDNA,
   uploadedImages,
   selectedImageIndex,
   onScenesGenerated,
   onBack,
-}: Step6FinalGenerationProps) {
+}: Step5FinalGenerationProps) {
   const [generatedScenes, setGeneratedScenes] = useState<GeneratedScene[]>([]);
   const [isGenerating, setIsGenerating] = useState(false);
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -68,26 +66,14 @@ export default function Step6FinalGeneration({
   // Face swap state - keyed by scene index
   const [faceSwapStates, setFaceSwapStates] = useState<Record<number, FaceSwapState>>({});
 
-  // Portrait mode selection
-  // "grid_and_best" = Character Portrait (2x2 Grid) + Best User Portrait
-  // "top_3_portraits" = Top 3 Best User Portraits only
-  // "all_combined" = Grid + Best Photo + Top 3 Portraits (all references)
-  // "single_best" = Just the single best user portrait
-  const [portraitMode, setPortraitMode] = useState<"grid_and_best" | "top_3_portraits" | "all_combined" | "single_best">("grid_and_best");
-
-  // Model selection for scene generation
-  const [generationModel, setGenerationModel] = useState<"nano-banana" | "ideogram-character">("nano-banana");
-
   // Get the selected permutations
   const selectedPermutations = permutations.filter((p) =>
     selectedPermutationIds.includes(p.id)
   );
 
-  // Get the best user portrait URL
+  // Get the best user portrait URL (selected by AI in Step 3)
+  // Ideogram only supports a single reference image, so we use the best one
   const userBestPortraitUrl = uploadedImages[selectedImageIndex]?.url || uploadedImages[0]?.url;
-
-  // Get top 3 user portrait URLs
-  const top3PortraitUrls = uploadedImages.slice(0, 3).map((img) => img.url);
 
   // Initialize generated scenes state
   useEffect(() => {
@@ -103,53 +89,18 @@ export default function Step6FinalGeneration({
 
   const generateScene = async (scene: GeneratedScene, index: number): Promise<GeneratedScene> => {
     try {
-      // Determine which reference images to use based on portrait mode
-      let referenceData: {
-        characterPortraitUrl: string | null;
-        userBestPortraitUrl: string | null;
-        referenceImageUrls: string[] | null;
-      };
-
-      switch (portraitMode) {
-        case "grid_and_best":
-          referenceData = {
-            characterPortraitUrl,
-            userBestPortraitUrl,
-            referenceImageUrls: null,
-          };
-          break;
-        case "top_3_portraits":
-          referenceData = {
-            characterPortraitUrl: null,
-            userBestPortraitUrl: null,
-            referenceImageUrls: top3PortraitUrls,
-          };
-          break;
-        case "all_combined":
-          referenceData = {
-            characterPortraitUrl,
-            userBestPortraitUrl,
-            referenceImageUrls: top3PortraitUrls,
-          };
-          break;
-        case "single_best":
-          referenceData = {
-            characterPortraitUrl: null,
-            userBestPortraitUrl,
-            referenceImageUrls: null,
-          };
-          break;
-      }
+      // Ideogram only supports a single reference image, use the best portrait from Step 3
+      const referenceImageUrls = [userBestPortraitUrl];
 
       const response = await fetch("/api/scene/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           prompt: scene.prompt,
-          ...referenceData,
+          referenceImageUrls,
           characterDNA,
           sceneIndex: index,
-          model: generationModel,
+          model: "ideogram-character", // v2: Always use Ideogram
         }),
       });
 
@@ -231,6 +182,43 @@ export default function Step6FinalGeneration({
     }
 
     setIsGenerating(false);
+    onScenesGenerated(updatedScenes);
+  };
+
+  // Reject and regenerate a specific scene (pose will change)
+  const regenerateScene = async (sceneIndex: number) => {
+    const scene = generatedScenes[sceneIndex];
+    if (!scene) return;
+
+    // Update the scene status to generating
+    const updatedScenes = [...generatedScenes];
+    updatedScenes[sceneIndex] = {
+      ...updatedScenes[sceneIndex],
+      status: "generating",
+      error: undefined,
+      url: "" // Clear old URL
+    };
+    setGeneratedScenes(updatedScenes);
+    setCurrentIndex(sceneIndex);
+
+    // Clear validation result for this scene
+    if (validationResult) {
+      setValidationResult(null);
+    }
+
+    // Clear face swap state for this scene
+    if (faceSwapStates[sceneIndex]) {
+      setFaceSwapStates((prev) => {
+        const newState = { ...prev };
+        delete newState[sceneIndex];
+        return newState;
+      });
+    }
+
+    // Regenerate the scene (pose will be different due to AI randomness)
+    const result = await generateScene(scene, sceneIndex);
+    updatedScenes[sceneIndex] = result;
+    setGeneratedScenes([...updatedScenes]);
     onScenesGenerated(updatedScenes);
   };
 
@@ -385,7 +373,7 @@ export default function Step6FinalGeneration({
       <div className="border-b border-grey-light pb-4 sm:pb-6">
         <div className="flex items-center gap-3 mb-2 sm:mb-3">
           <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-gold flex items-center justify-center shrink-0">
-            <span className="text-xl sm:text-2xl font-bold text-charcoal">6</span>
+            <span className="text-xl sm:text-2xl font-bold text-charcoal">5</span>
           </div>
           <h2 className="text-2xl sm:text-3xl font-bold text-charcoal" style={{ letterSpacing: "-0.01em" }}>
             Final Scene Generation
@@ -396,240 +384,23 @@ export default function Step6FinalGeneration({
         </p>
       </div>
 
-      {/* Reference Images Card */}
-      <div className="bg-charcoal/5 rounded-xl p-6">
-        <h3 className="font-semibold text-charcoal mb-4">Reference Images</h3>
-        <div className="grid grid-cols-2 gap-4">
-          {/* Character Portrait (2x2 Grid) */}
-          <div className="space-y-2">
-            <p className="text-sm text-grey">Character Portrait (2x2 Grid)</p>
-            {characterPortraitUrl ? (
-              <div className="aspect-square rounded-lg overflow-hidden bg-grey-light">
-                <img
-                  src={characterPortraitUrl}
-                  alt="Character Portrait"
-                  className="w-full h-full object-cover"
-                />
-              </div>
-            ) : (
-              <div className="aspect-square rounded-lg bg-grey-light flex items-center justify-center">
-                <span className="text-grey text-sm">Not available</span>
-              </div>
-            )}
-          </div>
-
-          {/* Best User Portrait */}
-          <div className="space-y-2">
-            <p className="text-sm text-grey">Best User Portrait</p>
-            {userBestPortraitUrl ? (
-              <div className="aspect-square rounded-lg overflow-hidden bg-grey-light">
-                <img
-                  src={userBestPortraitUrl}
-                  alt="Best Portrait"
-                  className="w-full h-full object-cover"
-                />
-              </div>
-            ) : (
-              <div className="aspect-square rounded-lg bg-grey-light flex items-center justify-center">
-                <span className="text-grey text-sm">Not available</span>
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* Model Selection */}
+      {/* Reference Image Preview */}
       {!isGenerating && generatedScenes.every((s) => s.status === "pending") && (
         <div className="bg-white rounded-xl p-6 border border-grey-light">
-          <h3 className="font-semibold text-charcoal mb-3">Generation Model</h3>
+          <h3 className="font-semibold text-charcoal mb-3">Reference Image</h3>
           <p className="text-sm text-grey mb-4">
-            Choose which AI model to use for generating scenes:
+            Using the best photo selected in Step 3 as the character reference:
           </p>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            {/* Nano Banana */}
-            <label className="flex flex-col p-4 rounded-lg border-2 cursor-pointer transition-all hover:border-gold/50"
-              style={{ borderColor: generationModel === "nano-banana" ? "#D4AF37" : "#E5E5E5" }}
-            >
-              <div className="flex items-center gap-2 mb-2">
-                <input
-                  type="radio"
-                  name="generationModel"
-                  value="nano-banana"
-                  checked={generationModel === "nano-banana"}
-                  onChange={() => setGenerationModel("nano-banana")}
-                  className="accent-gold"
-                />
-                <span className="font-medium text-charcoal">Google Nano Banana</span>
-              </div>
-              <p className="text-xs text-grey">
-                Supports multiple reference images. Good for consistent character generation with various references.
+          <div className="flex items-center gap-4">
+            <div className="w-20 h-20 rounded-lg overflow-hidden bg-grey-light border-2 border-gold">
+              <img src={userBestPortraitUrl} alt="Best Portrait" className="w-full h-full object-cover" />
+            </div>
+            <div className="flex-1">
+              <span className="font-medium text-charcoal">Best Photo (AI Selected)</span>
+              <p className="text-xs text-grey mt-1">
+                This image will be used as the character reference for all scene generations.
               </p>
-            </label>
-
-            {/* Ideogram Character */}
-            <label className="flex flex-col p-4 rounded-lg border-2 cursor-pointer transition-all hover:border-gold/50"
-              style={{ borderColor: generationModel === "ideogram-character" ? "#D4AF37" : "#E5E5E5" }}
-            >
-              <div className="flex items-center gap-2 mb-2">
-                <input
-                  type="radio"
-                  name="generationModel"
-                  value="ideogram-character"
-                  checked={generationModel === "ideogram-character"}
-                  onChange={() => setGenerationModel("ideogram-character")}
-                  className="accent-gold"
-                />
-                <span className="font-medium text-charcoal">Ideogram Character</span>
-              </div>
-              <p className="text-xs text-grey">
-                Single reference image. Excellent character consistency with automatic facial feature detection.
-              </p>
-            </label>
-          </div>
-          {generationModel === "ideogram-character" && (
-            <p className="text-xs text-gold mt-3 flex items-center gap-1">
-              <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
-              </svg>
-              Note: Ideogram uses only the first reference image (best portrait or 2x2 grid)
-            </p>
-          )}
-        </div>
-      )}
-
-      {/* Portrait Mode Selection */}
-      {!isGenerating && generatedScenes.every((s) => s.status === "pending") && (
-        <div className="bg-white rounded-xl p-6 border border-grey-light">
-          <h3 className="font-semibold text-charcoal mb-3">Reference Image Mode</h3>
-          <p className="text-sm text-grey mb-4">
-            Choose which reference images to use for generating scenes:
-          </p>
-          <div className="space-y-3">
-            {/* Option 1: Grid + Best Portrait */}
-            <label className="flex items-start gap-3 p-3 rounded-lg border-2 cursor-pointer transition-all hover:border-gold/50"
-              style={{ borderColor: portraitMode === "grid_and_best" ? "#D4AF37" : "#E5E5E5" }}
-            >
-              <input
-                type="radio"
-                name="portraitMode"
-                value="grid_and_best"
-                checked={portraitMode === "grid_and_best"}
-                onChange={() => setPortraitMode("grid_and_best")}
-                className="mt-1 accent-gold"
-              />
-              <div className="flex-1">
-                <span className="font-medium text-charcoal">Character Portrait Grid + Best Photo (Recommended)</span>
-                <p className="text-xs text-grey mt-1">
-                  Uses the AI-generated 2x2 portrait composite along with your best uploaded photo for consistent facial features.
-                </p>
-              </div>
-              <div className="flex gap-2 shrink-0">
-                {characterPortraitUrl && (
-                  <div className="w-12 h-12 rounded-lg overflow-hidden bg-grey-light border border-grey-light">
-                    <img src={characterPortraitUrl} alt="2x2 Grid" className="w-full h-full object-cover" />
-                  </div>
-                )}
-                {userBestPortraitUrl && (
-                  <div className="w-12 h-12 rounded-lg overflow-hidden bg-grey-light border border-grey-light">
-                    <img src={userBestPortraitUrl} alt="Best Photo" className="w-full h-full object-cover" />
-                  </div>
-                )}
-              </div>
-            </label>
-
-            {/* Option 2: Single Best Portrait */}
-            <label className="flex items-start gap-3 p-3 rounded-lg border-2 cursor-pointer transition-all hover:border-gold/50"
-              style={{ borderColor: portraitMode === "single_best" ? "#D4AF37" : "#E5E5E5" }}
-            >
-              <input
-                type="radio"
-                name="portraitMode"
-                value="single_best"
-                checked={portraitMode === "single_best"}
-                onChange={() => setPortraitMode("single_best")}
-                className="mt-1 accent-gold"
-              />
-              <div className="flex-1">
-                <span className="font-medium text-charcoal">Single Best Portrait</span>
-                <p className="text-xs text-grey mt-1">
-                  Uses only your single best uploaded photo. Ideal for Ideogram Character model which works best with one reference.
-                </p>
-              </div>
-              {userBestPortraitUrl && (
-                <div className="w-12 h-12 rounded-lg overflow-hidden bg-grey-light border border-grey-light shrink-0">
-                  <img src={userBestPortraitUrl} alt="Best Photo" className="w-full h-full object-cover" />
-                </div>
-              )}
-            </label>
-
-            {/* Option 3: Top 3 Portraits */}
-            <label className="flex items-start gap-3 p-3 rounded-lg border-2 cursor-pointer transition-all hover:border-gold/50"
-              style={{ borderColor: portraitMode === "top_3_portraits" ? "#D4AF37" : "#E5E5E5" }}
-            >
-              <input
-                type="radio"
-                name="portraitMode"
-                value="top_3_portraits"
-                checked={portraitMode === "top_3_portraits"}
-                onChange={() => setPortraitMode("top_3_portraits")}
-                className="mt-1 accent-gold"
-              />
-              <div className="flex-1">
-                <span className="font-medium text-charcoal">Top 3 Best User Portraits</span>
-                <p className="text-xs text-grey mt-1">
-                  Uses your top 3 uploaded photos directly without the AI-generated portrait grid. More natural but may have slight variations.
-                </p>
-              </div>
-              <div className="flex gap-1 shrink-0">
-                {top3PortraitUrls.map((url, i) => (
-                  <div key={i} className="w-10 h-10 rounded-lg overflow-hidden bg-grey-light border border-grey-light">
-                    <img src={url} alt={`Top ${i + 1}`} className="w-full h-full object-cover" />
-                  </div>
-                ))}
-              </div>
-            </label>
-
-            {/* Option 4: All Combined */}
-            <label className="flex items-start gap-3 p-3 rounded-lg border-2 cursor-pointer transition-all hover:border-gold/50"
-              style={{ borderColor: portraitMode === "all_combined" ? "#D4AF37" : "#E5E5E5" }}
-            >
-              <input
-                type="radio"
-                name="portraitMode"
-                value="all_combined"
-                checked={portraitMode === "all_combined"}
-                onChange={() => setPortraitMode("all_combined")}
-                className="mt-1 accent-gold"
-              />
-              <div className="flex-1">
-                <span className="font-medium text-charcoal">All References Combined</span>
-                <p className="text-xs text-grey mt-1">
-                  Uses everything: the 2x2 portrait grid, your best photo, and top 3 uploads. Maximum reference data for best facial consistency.
-                </p>
-              </div>
-              <div className="flex gap-1 shrink-0 flex-wrap justify-end" style={{ maxWidth: "140px" }}>
-                {characterPortraitUrl && (
-                  <div className="w-10 h-10 rounded-lg overflow-hidden bg-grey-light border-2 border-gold">
-                    <img src={characterPortraitUrl} alt="2x2 Grid" className="w-full h-full object-cover" />
-                  </div>
-                )}
-                {userBestPortraitUrl && (
-                  <div className="w-10 h-10 rounded-lg overflow-hidden bg-grey-light border-2 border-blue">
-                    <img src={userBestPortraitUrl} alt="Best" className="w-full h-full object-cover" />
-                  </div>
-                )}
-                {top3PortraitUrls.slice(0, 2).map((url, i) => (
-                  <div key={i} className="w-10 h-10 rounded-lg overflow-hidden bg-grey-light border border-grey-light">
-                    <img src={url} alt={`Top ${i + 1}`} className="w-full h-full object-cover" />
-                  </div>
-                ))}
-                {top3PortraitUrls.length > 2 && (
-                  <div className="w-10 h-10 rounded-lg bg-grey-light border border-grey-light flex items-center justify-center">
-                    <span className="text-xs text-grey">+{top3PortraitUrls.length - 2}</span>
-                  </div>
-                )}
-              </div>
-            </label>
+            </div>
           </div>
         </div>
       )}
@@ -764,6 +535,19 @@ export default function Step6FinalGeneration({
                       </span>
                     </div>
                   </div>
+
+                  {/* Reject & Regenerate Button - for completed scenes */}
+                  {scene.status === "completed" && !isGenerating && (
+                    <button
+                      onClick={() => regenerateScene(index)}
+                      className="w-full mt-2 py-2 text-xs bg-coral/10 text-coral font-medium rounded-lg hover:bg-coral/20 transition-colors flex items-center justify-center gap-1.5 border border-coral/20"
+                    >
+                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                      </svg>
+                      Reject & Regenerate Pose
+                    </button>
+                  )}
 
                   {/* Score Display */}
                   {getSceneScore(index) && (

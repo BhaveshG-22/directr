@@ -5,17 +5,19 @@ import { UserButton, SignInButton, useUser } from "@clerk/nextjs";
 import { Scene, PipelineState, ScenePermutation, GeneratedScene } from "../types";
 import Step1SceneSelection from "./Step1SceneSelection";
 import Step2CharacterDNA from "./Step2CharacterDNA";
-import Step3PortraitGeneration from "./Step3PortraitGeneration";
-import Step4BestSelection from "./Step4BestSelection";
-import Step5ScenePermutation from "./Step5ScenePermutation";
-import Step6FinalGeneration from "./Step6FinalGeneration";
+import Step3BestSelection from "./Step3BestSelection";
+import Step4ScenePermutation from "./Step4ScenePermutation";
+import Step5FinalGeneration from "./Step5FinalGeneration";
 
 interface PhotoshootPipelineProps {
   scenes: Scene[];
 }
 
 export default function PhotoshootPipeline({ scenes }: PhotoshootPipelineProps) {
-  const { isSignedIn, isLoaded } = useUser();
+  const { isSignedIn, isLoaded, user } = useUser();
+
+  // Get user's name from Clerk
+  const userName = user?.firstName || user?.fullName || user?.username || "User";
   const [state, setState] = useState<PipelineState>({
     currentStep: 1,
     selectedScene: null,
@@ -23,7 +25,7 @@ export default function PhotoshootPipeline({ scenes }: PhotoshootPipelineProps) 
     characterId: null,
     characterName: null,
     characterDNAString: null,
-    portraitUrl: null,
+    portraitUrl: null, // Keep for type compatibility, but not used in v2
     selectedImageIndex: null,
     generatedPermutations: [],
     selectedPermutationIds: [],
@@ -51,6 +53,7 @@ export default function PhotoshootPipeline({ scenes }: PhotoshootPipelineProps) 
         return (
           <Step2CharacterDNA
             uploadedImages={state.uploadedImages}
+            userName={userName}
             onCharacterCreated={(characterId, characterName, characterDNAString) =>
               updateState({ characterId, characterName, characterDNAString })
             }
@@ -60,27 +63,16 @@ export default function PhotoshootPipeline({ scenes }: PhotoshootPipelineProps) 
         );
       case 3:
         return (
-          <Step3PortraitGeneration
-            characterId={state.characterId!}
-            characterName={state.characterName!}
+          <Step3BestSelection
             uploadedImages={state.uploadedImages}
-            onPortraitGenerated={(url) => updateState({ portraitUrl: url })}
+            onBestImageSelected={(index) => updateState({ selectedImageIndex: index })}
             onBack={() => updateState({ currentStep: 2 })}
             onNext={() => updateState({ currentStep: 4 })}
           />
         );
       case 4:
         return (
-          <Step4BestSelection
-            uploadedImages={state.uploadedImages}
-            onBestImageSelected={(index) => updateState({ selectedImageIndex: index })}
-            onBack={() => updateState({ currentStep: 3 })}
-            onNext={() => updateState({ currentStep: 5 })}
-          />
-        );
-      case 5:
-        return (
-          <Step5ScenePermutation
+          <Step4ScenePermutation
             selectedScene={state.selectedScene!}
             characterDNA={state.characterDNAString || ""}
             onPermutationsGenerated={(permutations) =>
@@ -89,23 +81,22 @@ export default function PhotoshootPipeline({ scenes }: PhotoshootPipelineProps) 
             onSelectedPermutationsChange={(ids) =>
               updateState({ selectedPermutationIds: ids })
             }
-            onBack={() => updateState({ currentStep: 4 })}
-            onNext={() => updateState({ currentStep: 6 })}
+            onBack={() => updateState({ currentStep: 3 })}
+            onNext={() => updateState({ currentStep: 5 })}
           />
         );
-      case 6:
+      case 5:
         return (
-          <Step6FinalGeneration
+          <Step5FinalGeneration
             permutations={state.generatedPermutations}
             selectedPermutationIds={state.selectedPermutationIds}
-            characterPortraitUrl={state.portraitUrl || ""}
             characterDNA={state.characterDNAString || ""}
             uploadedImages={state.uploadedImages}
             selectedImageIndex={state.selectedImageIndex || 0}
             onScenesGenerated={(scenes) =>
               updateState({ generatedScenes: scenes })
             }
-            onBack={() => updateState({ currentStep: 5 })}
+            onBack={() => updateState({ currentStep: 4 })}
           />
         );
       default:
@@ -176,9 +167,9 @@ export default function PhotoshootPipeline({ scenes }: PhotoshootPipelineProps) 
           {/* Progress Indicator */}
           <div className="mb-12">
             <div className="flex justify-between items-start mb-6">
-              {[1, 2, 3, 4, 5, 6].map((step, index) => (
+              {[1, 2, 3, 4, 5].map((step, index) => (
                 <div key={step} className="flex flex-col items-center flex-1 relative">
-                  {index < 5 && (
+                  {index < 4 && (
                     <div className="absolute top-5 left-[50%] w-full h-0.5 bg-grey-light">
                       <div
                         className="h-full bg-gold transition-all duration-500"

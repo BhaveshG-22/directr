@@ -10,7 +10,7 @@ interface ScenePermutation {
   originalPrompt?: string;
 }
 
-interface Step5ScenePermutationProps {
+interface Step4ScenePermutationProps {
   selectedScene: Scene;
   characterDNA: string;
   onPermutationsGenerated: (permutations: ScenePermutation[]) => void;
@@ -19,14 +19,14 @@ interface Step5ScenePermutationProps {
   onNext: () => void;
 }
 
-export default function Step5ScenePermutation({
+export default function Step4ScenePermutation({
   selectedScene,
   characterDNA,
   onPermutationsGenerated,
   onSelectedPermutationsChange,
   onBack,
   onNext,
-}: Step5ScenePermutationProps) {
+}: Step4ScenePermutationProps) {
   const [isGenerating, setIsGenerating] = useState(false);
   const [permutations, setPermutations] = useState<ScenePermutation[]>([]);
   const [selectedPermutations, setSelectedPermutations] = useState<number[]>([]);
@@ -45,6 +45,12 @@ export default function Step5ScenePermutation({
           scenePrompt: selectedScene.detailedPrompt,
           characterDNA: characterDNA,
           count: 5,
+          // Pass additional style fields for enhanced prompt generation
+          environment: selectedScene.environment,
+          lighting: selectedScene.lighting,
+          mood: selectedScene.mood,
+          negativePrompt: selectedScene.negativePrompt,
+          poseTemplates: selectedScene.poseTemplates,
         }),
       });
 

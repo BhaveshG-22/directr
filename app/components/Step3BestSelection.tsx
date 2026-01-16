@@ -4,19 +4,19 @@
 import { useState } from "react";
 import { UploadedImage } from "../types";
 
-interface Step4BestSelectionProps {
+interface Step3BestSelectionProps {
   uploadedImages: UploadedImage[];
   onBestImageSelected: (index: number) => void;
   onBack: () => void;
   onNext: () => void;
 }
 
-export default function Step4BestSelection({
+export default function Step3BestSelection({
   uploadedImages,
   onBestImageSelected,
   onBack,
   onNext,
-}: Step4BestSelectionProps) {
+}: Step3BestSelectionProps) {
   const [isSelecting, setIsSelecting] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
   const [selectionReason, setSelectionReason] = useState<string | null>(null);
@@ -67,7 +67,7 @@ export default function Step4BestSelection({
       <div className="border-b border-grey-light pb-4 sm:pb-6">
         <div className="flex items-center gap-3 mb-2 sm:mb-3">
           <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-gold flex items-center justify-center flex-shrink-0">
-            <span className="text-xl sm:text-2xl font-bold text-charcoal">4</span>
+            <span className="text-xl sm:text-2xl font-bold text-charcoal">3</span>
           </div>
           <h2 className="text-2xl sm:text-3xl font-bold text-charcoal" style={{ letterSpacing: "-0.01em" }}>
             AI Selection
