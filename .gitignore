@@ -16,3 +16,9 @@ package-lock.json
 
 # Clerk configuration (may contain secrets)
 .clerk/
+
+# Temporary/generated files
+notes.txt
+processed_data.json
+report_for_accounting.md
+report_for_marketing.md
