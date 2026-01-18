@@ -12,6 +12,9 @@
   --dark-grey: #2D2D30;
   --medium-grey: #6B6B6B;
   --light-grey: #E8E8E8;
+  /* Landing Page Brand Colors */
+  --brand-teal: #20B8D1;
+  --brand-gold: #F59E0B;
 }
 
 @theme inline {
@@ -25,13 +28,16 @@
   --color-grey-dark: var(--dark-grey);
   --color-grey: var(--medium-grey);
   --color-grey-light: var(--light-grey);
+  /* Landing Page Brand Colors - using direct hex for opacity modifier support */
+  --color-brand-teal: #20B8D1;
+  --color-brand-gold: #F59E0B;
 
   /* Default Theme */
   --color-background: var(--soft-cream);
   --color-foreground: var(--deep-charcoal);
 
   /* Fonts */
-  --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Helvetica Neue', Arial, sans-serif;
+  --font-sans: var(--font-inter), 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Helvetica Neue', Arial, sans-serif;
   --font-mono: var(--font-geist-mono);
 
   /* Spacing Scale (8px base) */
@@ -53,10 +59,69 @@
   /* Shadows */
   --shadow-card: 0 2px 8px rgba(0,0,0,0.08);
   --shadow-card-hover: 0 4px 16px rgba(0,0,0,0.12);
+
+  /* Animations */
+  --animate-blob: blob 7s infinite;
+  --animate-float: float 6s ease-in-out infinite;
+}
+
+@keyframes blob {
+  0% { transform: translate(0px, 0px) scale(1); }
+  33% { transform: translate(30px, -50px) scale(1.1); }
+  66% { transform: translate(-20px, 20px) scale(0.9); }
+  100% { transform: translate(0px, 0px) scale(1); }
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-20px); }
+}
+
+.animate-blob {
+  animation: blob 7s infinite;
+}
+
+.animate-float {
+  animation: float 6s ease-in-out infinite;
+}
+
+.animation-delay-2000 {
+  animation-delay: 2s;
+}
+
+.animation-delay-4000 {
+  animation-delay: 4s;
+}
+
+/* Custom scrollbar for landing page */
+.landing-page::-webkit-scrollbar {
+  width: 8px;
+}
+.landing-page::-webkit-scrollbar-track {
+  background: #0f172a;
+}
+.landing-page::-webkit-scrollbar-thumb {
+  background: #334155;
+  border-radius: 4px;
+}
+.landing-page::-webkit-scrollbar-thumb:hover {
+  background: #475569;
 }
 
 body {
   background: var(--color-background);
   color: var(--color-foreground);
   font-family: var(--font-sans);
+}
+
+/* Ensure proper text rendering */
+* {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Prevent text from collapsing in flex containers */
+p, h1, h2, h3, h4, h5, h6 {
+  min-width: 0;
+  max-width: 100%;
 }
